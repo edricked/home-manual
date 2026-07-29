@@ -24,6 +24,9 @@ type TaskRow = {
   updated_at: string;
   last_completed_at: string | null;
   archived_at: string | null;
+  reminder_enabled: number;
+  reminder_days_before: number;
+  notification_id: string | null;
 };
 
 type EventRow = {
@@ -48,6 +51,9 @@ export type MaintenanceTask = {
   updatedAt: string;
   lastCompletedAt: string | null;
   pausedAt: string | null;
+  reminderEnabled: boolean;
+  reminderDaysBefore: number;
+  notificationId: string | null;
 };
 
 export type MaintenanceEvent = {
@@ -65,6 +71,7 @@ const taskColumns = `
   t.id, t.home_id, t.item_id, i.name AS item_name, t.title, t.interval_days,
   t.next_due_date, t.notes, t.created_at, t.updated_at,
   t.archived_at,
+  t.reminder_enabled, t.reminder_days_before, t.notification_id,
   (SELECT MAX(e.completed_at) FROM maintenance_events e WHERE e.task_id = t.id) AS last_completed_at
 `;
 
@@ -82,6 +89,9 @@ function taskFromRow(row: TaskRow): MaintenanceTask {
     updatedAt: row.updated_at,
     lastCompletedAt: row.last_completed_at,
     pausedAt: row.archived_at,
+    reminderEnabled: row.reminder_enabled === 1,
+    reminderDaysBefore: row.reminder_days_before,
+    notificationId: row.notification_id,
   };
 }
 
@@ -234,6 +244,26 @@ export async function setMaintenancePaused(
     'UPDATE maintenance_tasks SET archived_at = ?, updated_at = ? WHERE id = ?',
     paused ? now : null,
     now,
+    id,
+  );
+  if (result.changes !== 1) throw new Error('This maintenance task no longer exists.');
+}
+
+export async function updateMaintenanceReminder(
+  db: SQLiteDatabase,
+  id: string,
+  enabled: boolean,
+  daysBefore: number,
+  notificationId: string | null,
+): Promise<void> {
+  const result = await db.runAsync(
+    `UPDATE maintenance_tasks
+     SET reminder_enabled = ?, reminder_days_before = ?, notification_id = ?, updated_at = ?
+     WHERE id = ?`,
+    enabled ? 1 : 0,
+    daysBefore,
+    notificationId,
+    new Date().toISOString(),
     id,
   );
   if (result.changes !== 1) throw new Error('This maintenance task no longer exists.');

@@ -9,12 +9,15 @@ import {
   completeMaintenanceTask,
   formatDate,
   getDueState,
+  getMaintenanceTask,
   listMaintenanceEvents,
   listMaintenanceTasks,
   listPausedMaintenanceTasks,
+  updateMaintenanceReminder,
   type MaintenanceEvent,
   type MaintenanceTask,
 } from '@/features/maintenance/maintenance-repository';
+import { scheduleTaskReminder } from '../features/reminders/reminder-service';
 
 export default function MaintenanceScreen() {
   const db = useSQLiteContext();
@@ -60,9 +63,22 @@ export default function MaintenanceScreen() {
     setError(undefined);
     try {
       await completeMaintenanceTask(db, task, notes);
+      let reminderFailed = false;
+      if (task.reminderEnabled) {
+        try {
+          const updated = await getMaintenanceTask(db, task.id);
+          if (updated) {
+            const notificationId = await scheduleTaskReminder(updated, task.reminderDaysBefore);
+            await updateMaintenanceReminder(db, task.id, true, task.reminderDaysBefore, notificationId);
+          }
+        } catch {
+          reminderFailed = true;
+        }
+      }
       setPendingTask(undefined);
       setCompletionNotes('');
       await load();
+      if (reminderFailed) setError('Task completed, but its next reminder could not be scheduled.');
     } catch {
       setError('Could not mark this task complete.');
     } finally {

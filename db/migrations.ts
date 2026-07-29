@@ -1,6 +1,6 @@
 import { type SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 
 export async function migrateDatabase(db: SQLiteDatabase) {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -153,6 +153,14 @@ export async function migrateDatabase(db: SQLiteDatabase) {
 
         CREATE INDEX IF NOT EXISTS home_essentials_home_idx
           ON home_essentials(home_id, updated_at DESC);
+      `);
+    }
+
+    if (currentVersion < 8) {
+      await db.execAsync(`
+        ALTER TABLE maintenance_tasks ADD COLUMN reminder_enabled INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE maintenance_tasks ADD COLUMN reminder_days_before INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE maintenance_tasks ADD COLUMN notification_id TEXT;
       `);
     }
 

@@ -41,6 +41,9 @@ const maintenanceTaskSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   archived_at: nullableText,
+  reminder_enabled: z.number().int().default(0),
+  reminder_days_before: z.number().int().default(1),
+  notification_id: nullableText.default(null),
 });
 
 const maintenanceEventSchema = z.object({
@@ -326,10 +329,12 @@ export async function restoreBackup(db: SQLiteDatabase, backup: HomeManualBackup
       await db.runAsync(
         `INSERT INTO maintenance_tasks (
           id, home_id, item_id, title, interval_days, next_due_date, notes,
-          created_at, updated_at, archived_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          created_at, updated_at, archived_at, reminder_enabled, reminder_days_before,
+          notification_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.id, row.home_id, row.item_id, row.title, row.interval_days,
         row.next_due_date, row.notes, row.created_at, row.updated_at, row.archived_at,
+        row.reminder_enabled, row.reminder_days_before, null,
       );
     }
     for (const row of value.data.maintenanceEvents) {

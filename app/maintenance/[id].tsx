@@ -5,9 +5,11 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -23,9 +25,15 @@ import {
   setMaintenancePaused,
   undoMaintenanceEvent,
   updateMaintenanceTask,
+  updateMaintenanceReminder,
   type MaintenanceEvent,
   type MaintenanceTask,
 } from '@/features/maintenance/maintenance-repository';
+import {
+  cancelTaskReminder,
+  requestReminderPermission,
+  scheduleTaskReminder,
+} from '../../features/reminders/reminder-service';
 
 const intervals = [
   { days: 30, label: 'Monthly' },
@@ -45,9 +53,12 @@ export default function MaintenanceDetailScreen() {
   const [intervalDays, setIntervalDays] = useState(90);
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderDaysBefore, setReminderDaysBefore] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [confirm, setConfirm] = useState<{ kind: 'delete' } | { kind: 'undo'; event: MaintenanceEvent }>();
+  const remindersAvailable = Platform.OS !== 'web';
 
   const load = useCallback(async () => {
     try {
@@ -67,6 +78,8 @@ export default function MaintenanceDetailScreen() {
       setIntervalDays(taskRow.intervalDays);
       setDueDate(taskRow.nextDueDate);
       setNotes(taskRow.notes ?? '');
+      setReminderEnabled(taskRow.reminderEnabled);
+      setReminderDaysBefore(taskRow.reminderDaysBefore);
     } catch {
       setError('Could not load this maintenance task.');
     }
@@ -87,6 +100,19 @@ export default function MaintenanceDetailScreen() {
         nextDueDate: dueDate,
         notes: notes || null,
       });
+      if (reminderEnabled && !task.pausedAt) {
+        const updatedTask: MaintenanceTask = {
+          ...task,
+          itemId,
+          itemName: items.find((item) => item.id === itemId)?.name ?? task.itemName,
+          title,
+          intervalDays,
+          nextDueDate: dueDate,
+          notes: notes || null,
+        };
+        const notificationId = await scheduleTaskReminder(updatedTask, reminderDaysBefore);
+        await updateMaintenanceReminder(db, task.id, true, reminderDaysBefore, notificationId);
+      }
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save this task.');
@@ -99,7 +125,14 @@ export default function MaintenanceDetailScreen() {
     if (!task) return;
     setSaving(true);
     try {
+      if (!task.pausedAt) await cancelTaskReminder(task.notificationId);
       await setMaintenancePaused(db, task.id, !task.pausedAt);
+      if (task.pausedAt && reminderEnabled) {
+        const notificationId = await scheduleTaskReminder(task, reminderDaysBefore);
+        await updateMaintenanceReminder(db, task.id, true, reminderDaysBefore, notificationId);
+      } else if (!task.pausedAt) {
+        await updateMaintenanceReminder(db, task.id, reminderEnabled, reminderDaysBefore, null);
+      }
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not update this task.');
@@ -113,6 +146,7 @@ export default function MaintenanceDetailScreen() {
     setSaving(true);
     try {
       if (confirm.kind === 'delete') {
+        await cancelTaskReminder(task.notificationId);
         await deleteMaintenanceTask(db, task.id);
         setConfirm(undefined);
         router.replace('/maintenance');
@@ -120,10 +154,59 @@ export default function MaintenanceDetailScreen() {
       }
       await undoMaintenanceEvent(db, task, confirm.event);
       setConfirm(undefined);
+      if (reminderEnabled && !task.pausedAt) {
+        const updated = await getMaintenanceTask(db, task.id);
+        if (updated) {
+          const notificationId = await scheduleTaskReminder(updated, reminderDaysBefore);
+          await updateMaintenanceReminder(db, task.id, true, reminderDaysBefore, notificationId);
+        }
+      }
       await load();
     } catch (caught) {
       setConfirm(undefined);
       setError(caught instanceof Error ? caught.message : 'Could not make that change.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleReminder(enabled: boolean) {
+    if (!task) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      if (!enabled) {
+        await cancelTaskReminder(task.notificationId);
+        await updateMaintenanceReminder(db, task.id, false, reminderDaysBefore, null);
+        setReminderEnabled(false);
+        await load();
+        return;
+      }
+      const permission = await requestReminderPermission();
+      if (permission === 'unavailable') throw new Error('Reminders are available in the installed iPhone and Android app.');
+      if (permission !== 'granted') throw new Error('Notifications are turned off. Enable them in your phone settings.');
+      const notificationId = await scheduleTaskReminder(task, reminderDaysBefore);
+      await updateMaintenanceReminder(db, task.id, true, reminderDaysBefore, notificationId);
+      setReminderEnabled(true);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not enable this reminder.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function changeReminderDays(days: number) {
+    setReminderDaysBefore(days);
+    if (!task || !reminderEnabled || task.pausedAt) return;
+    setSaving(true);
+    try {
+      const currentTask = { ...task, title, intervalDays, nextDueDate: dueDate };
+      const notificationId = await scheduleTaskReminder(currentTask, days);
+      await updateMaintenanceReminder(db, task.id, true, days, notificationId);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not reschedule this reminder.');
     } finally {
       setSaving(false);
     }
@@ -158,6 +241,45 @@ export default function MaintenanceDetailScreen() {
               </Pressable>
             ))}
           </View>
+        </View>
+
+        <View style={styles.reminderCard}>
+          <View style={styles.reminderTop}>
+            <View style={styles.reminderIcon}><Ionicons color="#2f6651" name="notifications-outline" size={21} /></View>
+            <View style={styles.flex}>
+              <Text style={styles.reminderTitle}>Maintenance reminder</Text>
+              <Text style={styles.reminderBody}>
+                {!remindersAvailable
+                  ? 'Available in the installed iPhone and Android app.'
+                  : task?.pausedAt
+                    ? 'Resume this task to schedule its reminder.'
+                    : 'A local notification on this device.'}
+              </Text>
+            </View>
+            <Switch
+              disabled={saving || Boolean(task?.pausedAt) || !remindersAvailable}
+              onValueChange={toggleReminder}
+              trackColor={{ false: '#cfd6d2', true: '#6b9a86' }}
+              value={reminderEnabled && !task?.pausedAt}
+            />
+          </View>
+          {reminderEnabled ? (
+            <View style={styles.reminderOptions}>
+              {[0, 1, 3, 7].map((days) => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: reminderDaysBefore === days }}
+                  disabled={saving || Boolean(task?.pausedAt)}
+                  key={days}
+                  onPress={() => changeReminderDays(days)}
+                  style={[styles.reminderOption, reminderDaysBefore === days && styles.reminderOptionSelected]}>
+                  <Text style={[styles.reminderOptionText, reminderDaysBefore === days && styles.reminderOptionTextSelected]}>
+                    {days === 0 ? 'Due day' : `${days}d before`}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <Field label="Task name" onChangeText={setTitle} value={title} />
@@ -326,6 +448,16 @@ const styles = StyleSheet.create({
   pausedPill: { backgroundColor: '#e7e9e7', borderRadius: 9, color: '#61706a', fontSize: 9, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4 },
   primaryButton: { alignItems: 'center', backgroundColor: '#263b33', borderRadius: 13, justifyContent: 'center', marginTop: 20, minHeight: 52 },
   primaryText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  reminderBody: { color: '#6d7973', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  reminderCard: { backgroundColor: '#edf3f0', borderRadius: 15, gap: 13, marginBottom: 18, padding: 14 },
+  reminderIcon: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
+  reminderOption: { backgroundColor: '#fff', borderColor: '#d3dcd7', borderRadius: 16, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
+  reminderOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  reminderOptionSelected: { backgroundColor: '#2f6651', borderColor: '#2f6651' },
+  reminderOptionText: { color: '#58665f', fontSize: 11, fontWeight: '700' },
+  reminderOptionTextSelected: { color: '#fff' },
+  reminderTitle: { color: '#31413a', fontSize: 14, fontWeight: '800' },
+  reminderTop: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   secondaryButton: { alignItems: 'center', borderColor: '#bcc9c3', borderRadius: 12, borderWidth: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 49 },
   secondaryText: { color: '#405a4f', fontSize: 14, fontWeight: '800' },
   section: { gap: 8, marginBottom: 17 },

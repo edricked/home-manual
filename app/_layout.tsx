@@ -1,11 +1,12 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { type Href, router, Stack } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { type PropsWithChildren, Suspense, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { migrateDatabase } from '@/db/migrations';
+import { configureReminderNavigation } from '@/features/reminders/reminder-service';
 
 function DatabaseFallback() {
   return (
@@ -70,6 +71,14 @@ function WebDatabaseGate({ children }: PropsWithChildren) {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    configureReminderNavigation((url) => router.push(url as Href)).then((value) => {
+      cleanup = value;
+    });
+    return () => cleanup?.();
+  }, []);
 
   return (
     <SafeAreaProvider>

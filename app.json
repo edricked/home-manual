@@ -48,7 +48,14 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-notifications",
+        {
+          "color": "#2F6651",
+          "defaultChannel": "maintenance"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

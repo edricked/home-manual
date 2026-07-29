@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type Href, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -21,6 +21,12 @@ import {
   getBackupSummary,
   restoreBackup,
 } from '@/features/backup/backup-service';
+import {
+  getReminderPermission,
+  getScheduledReminderCount,
+  requestReminderPermission,
+  type ReminderPermission,
+} from '../features/reminders/reminder-service';
 
 function describeBackup(summary: BackupSummary) {
   const parts = [
@@ -40,8 +46,22 @@ export default function MoreScreen() {
   const [pendingBackup, setPendingBackup] = useState<HomeManualBackup | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reminderPermission, setReminderPermission] = useState<ReminderPermission>();
+  const [scheduledReminders, setScheduledReminders] = useState(0);
 
   const pendingSummary = pendingBackup ? getBackupSummary(pendingBackup) : null;
+
+  useEffect(() => {
+    Promise.all([getReminderPermission(), getScheduledReminderCount()]).then(([permission, count]) => {
+      setReminderPermission(permission);
+      setScheduledReminders(count);
+    });
+  }, []);
+
+  async function enableReminders() {
+    const permission = await requestReminderPermission();
+    setReminderPermission(permission);
+  }
 
   async function createBackupFile() {
     setBusy('export');
@@ -142,6 +162,29 @@ export default function MoreScreen() {
           </Text>
         </View>
 
+        <View style={styles.reminderStatusCard}>
+          <View style={styles.iconTile}>
+            <Ionicons color="#2f6651" name="notifications-outline" size={23} />
+          </View>
+          <View style={styles.reminderStatusCopy}>
+            <Text style={styles.cardTitle}>Maintenance reminders</Text>
+            <Text style={styles.cardBody}>
+              {reminderPermission === 'unavailable'
+                ? 'Available when Home Manual is running on iPhone or Android.'
+                : reminderPermission === 'granted'
+                  ? `${scheduledReminders} reminder${scheduledReminders === 1 ? '' : 's'} scheduled on this device.`
+                  : reminderPermission === 'denied'
+                    ? 'Notifications are disabled. Enable them in your phone settings.'
+                    : 'Allow local notifications when you enable a reminder on a task.'}
+            </Text>
+          </View>
+          {reminderPermission === 'undetermined' ? (
+            <Pressable accessibilityRole="button" onPress={enableReminders} style={styles.allowButton}>
+              <Text style={styles.allowButtonText}>Allow</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
         {message ? (
           <View style={styles.successBanner}>
             <Ionicons color="#2f6651" name="checkmark-circle" size={20} />
@@ -236,6 +279,8 @@ export default function MoreScreen() {
 
 const styles = StyleSheet.create({
   backupCard: { backgroundColor: '#fff', borderColor: '#e3e6e2', borderRadius: 20, borderWidth: 1, gap: 12, padding: 18 },
+  allowButton: { backgroundColor: '#e5f0ea', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  allowButtonText: { color: '#2f6651', fontSize: 12, fontWeight: '800' },
   cancelButton: { alignItems: 'center', justifyContent: 'center', minHeight: 46 },
   cancelButtonText: { color: '#53615c', fontSize: 15, fontWeight: '700' },
   cardBody: { color: '#68736f', fontSize: 14, lineHeight: 20 },
@@ -262,6 +307,8 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
   row: { borderBottomColor: '#e7e9e7', borderBottomWidth: 1, gap: 4, paddingVertical: 16 },
   rowTitle: { color: '#26332f', fontSize: 16, fontWeight: '700' },
+  reminderStatusCard: { alignItems: 'center', backgroundColor: '#fff', borderColor: '#e3e6e2', borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 12, marginTop: 14, padding: 15 },
+  reminderStatusCopy: { flex: 1 },
   secondaryButton: { alignItems: 'center', borderColor: '#b9cbc3', borderRadius: 13, borderWidth: 1, flexDirection: 'row', gap: 9, justifyContent: 'center', minHeight: 51 },
   secondaryButtonText: { color: '#2f6651', fontSize: 15, fontWeight: '800' },
   sectionLabel: { color: '#53615c', fontSize: 12, fontWeight: '800', letterSpacing: 0.8, marginBottom: 9, marginTop: 26 },

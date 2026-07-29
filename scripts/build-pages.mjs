@@ -48,4 +48,12 @@ await copyFile(
   path.join(outputDirectory, 'index.html'),
   path.join(outputDirectory, '404.html')
 );
+await copyFile(
+  path.join(projectRoot, 'assets', 'images', 'home-manual-icon.png'),
+  path.join(outputDirectory, 'home-manual-icon.png')
+);
+await copyFile(
+  path.join(projectRoot, 'assets', 'images', 'home-manual-icon.png'),
+  path.join(outputDirectory, 'apple-touch-icon.png')
+);
 await writeFile(path.join(outputDirectory, '.nojekyll'), '');

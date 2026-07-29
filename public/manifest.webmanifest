@@ -1,0 +1,26 @@
+{
+  "name": "Home Manual",
+  "short_name": "Home Manual",
+  "description": "Your private, searchable operating manual for your home.",
+  "id": "/home-manual/",
+  "start_url": "/home-manual/",
+  "scope": "/home-manual/",
+  "display": "standalone",
+  "background_color": "#F8F7F3",
+  "theme_color": "#F8F7F3",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/home-manual/home-manual-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/home-manual/home-manual-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

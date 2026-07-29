@@ -14,6 +14,11 @@ export default function Root({ children }: { children: ReactNode }) {
           name="viewport"
           content="width=device-width, initial-scale=1, shrink-to-fit=no"
         />
+        <meta name="application-name" content="Home Manual" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Home Manual" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta
           name="theme-color"
           content="#F8F7F3"
@@ -23,6 +28,14 @@ export default function Root({ children }: { children: ReactNode }) {
           name="theme-color"
           content="#17251F"
           media="(prefers-color-scheme: dark)"
+        />
+        <link
+          rel="apple-touch-icon"
+          href={`${githubPagesBaseUrl}/apple-touch-icon.png`}
+        />
+        <link
+          rel="manifest"
+          href={`${githubPagesBaseUrl}/manifest.webmanifest`}
         />
         <ScrollViewStyleReset />
         <script

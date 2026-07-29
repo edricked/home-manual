@@ -4,6 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -181,6 +182,10 @@ export default function MoreScreen() {
           {reminderPermission === 'undetermined' ? (
             <Pressable accessibilityRole="button" onPress={enableReminders} style={styles.allowButton}>
               <Text style={styles.allowButtonText}>Allow</Text>
+            </Pressable>
+          ) : reminderPermission === 'denied' ? (
+            <Pressable accessibilityRole="button" onPress={() => Linking.openSettings()} style={styles.allowButton}>
+              <Text style={styles.allowButtonText}>Settings</Text>
             </Pressable>
           ) : null}
         </View>
